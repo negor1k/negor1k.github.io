@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Flow | Leaderboard</title>
+    <style>
+        :root { --bg: #050505; --neon-blue: #00f3ff; --neon-red: #ff0055; --text: #fff; }
+        body { margin:0; background:var(--bg); color:var(--text); font-family:'Courier New',monospace; overflow:hidden; display:flex; justify-content:center; align-items:center; height:100vh; }
+
+        .screen { position:absolute; text-align:center; background:rgba(0,0,0,0.95); padding:2rem; border:2px solid var(--neon-blue); box-shadow:0 0 20px var(--neon-blue); border-radius:10px; display:none; z-index:10; min-width:340px; max-width:90vw; max-height:90vh; overflow-y:auto; }
+        .screen.active { display:block; }
+        h1 { color:var(--neon-blue); text-shadow:0 0 10px var(--neon-blue); margin-bottom:1rem; font-size:2rem; }
+        h3 { color:var(--neon-blue); margin:15px 0 10px; }
+
+        input { display:block; width:100%; box-sizing:border-box; padding:12px; margin:10px 0; background:#111; border:1px solid var(--neon-blue); color:white; font-family:inherit; outline:none; border-radius:4px; }
+        input:focus { box-shadow:0 0 10px var(--neon-blue); border-color:white; }
+
+        button { width:100%; background:var(--neon-blue); color:black; border:none; padding:14px; font-weight:bold; cursor:pointer; margin-top:12px; font-family:inherit; text-transform:uppercase; transition:0.2s; border-radius:4px; font-size:1rem; }
+        button:hover { background:white; box-shadow:0 0 15px white; }
+        button:disabled { opacity:0.5; cursor:not-allowed; }
+
+        .toggle-link { margin-top:12px; font-size:0.85rem; cursor:pointer; text-decoration:underline; color:#aaa; display:block; user-select:none; }
+        .toggle-link:hover { color:white; }
+        .error-msg { color:var(--neon-red); font-size:0.85rem; min-height:1.2em; margin-top:5px; }
+
+        canvas { position:absolute; top:0; left:0; z-index:1; display:block; }
+        #hud { position:absolute; top:20px; left:20px; font-size:1.3rem; pointer-events:none; z-index:5; text-shadow:0 0 10px var(--neon-blue); line-height:1.6; }
+
+        /* ===== LEADERBOARD TABLE ===== */
+        table { width:100%; border-collapse:collapse; margin-top:10px; }
+        th, td { padding:8px 6px; text-align:left; border-bottom:1px solid #222; font-size:0.9rem; }
+        th { color:var(--neon-blue); text-transform:uppercase; font-size:0.75rem; letter-spacing:1px; }
+        tr.me td { color:var(--neon-blue); font-weight:bold; text-shadow:0 0 6px var(--neon-blue); }
+        tr:nth-child(even) { background:rgba(255,255,255,0.02); }
+        .rank-1 td { color:#ffd700 !important; text-shadow:0 0 8px #ffd700 !important; }
+        .rank-2 td { color:#c0c0c0 !important; }
+        .rank-3 td { color:#cd7f32 !important; }
+
+        .loader { display:inline-block; width:20px; height:20px; border:3px solid rgba(255,255,255,.2); border-radius:50%; border-top-color:var(--neon-blue); animation:spin 0.8s linear infinite; margin:15px auto; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        .user-info { font-size:0.8rem; color:#888; margin-bottom:10px; }
+        .user-info span { color:var(--neon-blue); }
+    </style>
+</head>
+<body>
+
+<!-- ========== AUTH SCREEN ========== -->
+<div id="auth-screen" class="screen active">
+    <h1>NEON FLOW</h1>
+    <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">Уклоняйся от красного. Стань первым.</p>
+    <input type="text" id="nickname" placeholder="Никнейм" maxlength="15" autocomplete="off">
+    <input type="password" id="password" placeholder="Пароль (мин. 6 символов)" autocomplete="new-password">
+    <div id="auth-error" class="error-msg"></div>
+    <button id="auth-btn">ВОЙТИ</button>
+    <span class="toggle-link" id="toggle-auth">Нет аккаунта? Зарегистрироваться</span>
+</div>
+
+<!-- ========== MENU SCREEN (с таблицей лидеров) ========== -->
+<div id="menu-screen" class="screen">
+    <h1>NEON FLOW</h1>
+    <div class="user-info">Игрок: <span id="menu-nick">—</span></div>
+    <button id="play-btn">▶ ИГРАТЬ</button>
+
+    <h3>🏆 Топ-10 игроков</h3>
+    <div id="menu-lb-loader" class="loader"></div>
+    <table id="menu-leaderboard" style="display:none;">
+        <thead><tr><th>#</th><th>Игрок</th><th>Рекорд</th></tr></thead>
+        <tbody></tbody>
+    </table>
+
+    <span class="toggle-link" id="menu-logout">Выйти из аккаунта</span>
+</div>
+
+<!-- ========== GAME OVER SCREEN ========== -->
+<div id="gameover-screen" class="screen">
+    <h1 style="color:var(--neon-red)">GAME OVER</h1>
+    <p style="font-size:1.1rem;">Счёт: <span id="final-score" style="color:var(--neon-blue); font-weight:bold;">0</span></p>
+    <p id="new-record-msg" style="color:#ffd700; display:none; font-weight:bold;">🎉 НОВЫЙ РЕКОРД!</p>
+    <button id="restart-btn">ЕЩЁ РАЗ</button>
+    <button id="menu-btn" style="background:transparent; border:1px solid var(--neon-blue); color:var(--neon-blue);">В МЕНЮ</button>
+</div>
+
+<!-- ========== HUD ========== -->
+<div id="hud">
+    SCORE: <span id="score-display">0</span><br>
+    BEST: <span id="best-display">0</span>
+</div>
+<canvas id="gameCanvas"></canvas>
+
+<!-- ========== FIREBASE SDK ========== -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ==========================================
+// 1. FIREBASE INIT
+// ==========================================
+const firebaseConfig = {
+    apiKey: "AIzaSyBfgo2eT_1n5XSvSXqX0zqUjqUWc9dYI2M",
+    authDomain: "flow-game-976be.firebaseapp.com",
+    databaseURL: "https://flow-game-976be-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "flow-game-976be",
+    storageBucket: "flow-game-976be.firebasestorage.app",
+    messagingSenderId: "1036692034335",
+    appId: "1:1036692034335:web:aeba59c273c1bc4095962a",
+    measurementId: "G-LHJEHJ1D02"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+// ==========================================
+// 2. AUTH (Nick + Password)
+// ==========================================
+const AuthUI = {
+    isRegistering: false,
+    FAKE_DOMAIN: '@neonflow.game',
+
+    init() {
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                Game.currentUser = user.displayName || user.email.split('@')[0];
+                Game.uid = user.uid;
+                document.getElementById('menu-nick').textContent = Game.currentUser;
+                Leaderboard.loadBestScore(); // Загружаем лучший результат
+                Leaderboard.loadTop10('menu'); // Загружаем таблицу
+                UI.showScreen('menu-screen');
+            } else {
+                UI.showScreen('auth-screen');
+            }
+        });
+
+        document.getElementById('auth-btn').addEventListener('click', () => this.handleAuth());
+        document.getElementById('toggle-auth').addEventListener('click', () => this.toggleMode());
+        document.getElementById('password').addEventListener('keypress', e => {
+            if (e.key === 'Enter') this.handleAuth();
+        });
+    },
+
+    toggleMode() {
+        this.isRegistering = !this.isRegistering;
+        document.getElementById('auth-error').textContent = '';
+        document.getElementById('auth-btn').textContent = this.isRegistering ? 'ЗАРЕГИСТРИРОВАТЬСЯ' : 'ВОЙТИ';
+        document.getElementById('toggle-auth').textContent = this.isRegistering ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
+    },
+
+    async handleAuth() {
+        const nick = document.getElementById('nickname').value.trim().toLowerCase();
+        const pass = document.getElementById('password').value;
+        const errorDiv = document.getElementById('auth-error');
+        const btn = document.getElementById('auth-btn');
+
+        errorDiv.textContent = '';
+        if (!nick) { errorDiv.textContent = 'Введите никнейм'; return; }
+        if (pass.length < 6) { errorDiv.textContent = 'Пароль минимум 6 символов'; return; }
+
+        const email = nick + this.FAKE_DOMAIN;
+        btn.disabled = true;
+        btn.textContent = '...';
+
+        try {
+            if (this.isRegistering) {
+                const cred = await auth.createUserWithEmailAndPassword(email, pass);
+                await cred.user.updateProfile({ displayName: nick });
+            } else {
+                await auth.signInWithEmailAndPassword(email, pass);
+            }
+        } catch (err) {
+            let msg = 'Ошибка: ' + err.code;
+            switch(err.code) {
+                case 'auth/email-already-in-use': msg = 'Ник уже занят'; break;
+                case 'auth/wrong-password': case 'auth/user-not-found': case 'auth/invalid-credential': msg = 'Неверный ник или пароль'; break;
+                case 'auth/operation-not-allowed': msg = 'Включите Email/Password в Firebase!'; break;
+                case 'auth/network-request-failed': msg = 'Нет связи с сервером'; break;
+                case 'auth/too-many-requests': msg = 'Слишком много попыток, подождите'; break;
+            }
+            errorDiv.textContent = msg;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = this.isRegistering ? 'ЗАРЕГИСТРИРОВАТЬСЯ' : 'ВОЙТИ';
+        }
+    }
+};
+
+// ==========================================
+// 3. LEADERBOARD (Firebase Realtime DB)
+// ==========================================
+const Leaderboard = {
+
+    // Сохраняем ТОЛЬКО если новый счёт > старый лучший
+    async saveBestScore(nick, uid, newScore) {
+        const userRef = db.ref('leaderboard/' + uid);
+
+        try {
+            const snapshot = await userRef.once('value');
+            const existing = snapshot.val();
+
+            if (!existing || newScore > existing.bestScore) {
+                await userRef.set({
+                    nick: nick,
+                    bestScore: newScore,
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP
+                });
+                return true; // Новый рекорд!
+            }
+            return false; // Рекорд не побит
+        } catch (err) {
+            console.error('Save error:', err);
+            return false;
+        }
+    },
+
+    // Загружаем лучший результат текущего игрока
+    loadBestScore() {
+        if (!Game.uid) return;
+        db.ref('leaderboard/' + Game.uid + '/bestScore').on('value', snap => {
+            const best = snap.val() || 0;
+            Game.bestScore = best;
+            document.getElementById('best-display').textContent = best;
+        });
+    },
+
+    // Загружаем Топ-10
+    loadTop10(context) {
+        const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
+        const tableId = context === 'menu' ? 'menu-leaderboard' : null;
+
+        if (loaderId) {
+            document.getElementById(loaderId).style.display = 'inline-block';
+            document.getElementById(tableId).style.display = 'none';
+        }
+
+        db.ref('leaderboard')
+            .orderByChild('bestScore')
+            .limitToLast(10)
+            .once('value')
+            .then(snapshot => {
+                const entries = [];
+                snapshot.forEach(child => {
+                    entries.push({ uid: child.key, ...child.val() });
+                });
+                // Сортируем по убыванию
+                entries.sort((a, b) => b.bestScore - a.bestScore);
+
+                const tbody = document.querySelector(`#${tableId} tbody`);
+                tbody.innerHTML = '';
+
+                if (entries.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
+                } else {
+                    entries.forEach((entry, i) => {
+                        const tr = document.createElement('tr');
+                        const rank = i + 1;
+                        if (rank <= 3) tr.classList.add('rank-' + rank);
+                        if (entry.uid === Game.uid) tr.classList.add('me');
+
+                        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+                        tr.innerHTML = `<td>${medal}</td><td>${entry.nick || '???'}</td><td>${entry.bestScore}</td>`;
+                        tbody.appendChild(tr);
+                    });
+                }
+            })
+            .catch(err => {
+                console.error('Leaderboard load error:', err);
+                const tbody = document.querySelector(`#${tableId} tbody`);
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки</td></tr>';
+            })
+            .finally(() => {
+                if (loaderId) {
+                    document.getElementById(loaderId).style.display = 'none';
+                    document.getElementById(tableId).style.display = 'table';
+                }
+            });
+    }
+};
+
+// ==========================================
+// 4. GAME ENGINE
+// ==========================================
+const Game = {
+    canvas: document.getElementById('gameCanvas'),
+    ctx: null,
+    player: { x: 0, y: 0, size: 12 },
+    enemies: [],
+    score: 0,
+    bestScore: 0,
+    animationId: null,
+    isRunning: false,
+    currentUser: null,
+    uid: null,
+
+    start() {
+        this.ctx = this.canvas.getContext('2d');
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+
+        const moveHandler = (e) => {
+            if (!this.isRunning) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            this.player.x = cx - rect.left;
+            this.player.y = cy - rect.top;
+        };
+        window.addEventListener('mousemove', moveHandler);
+        window.addEventListener('touchmove', moveHandler, { passive: true });
+    },
+
+    resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    },
+
+    reset() {
+        this.score = 0;
+        this.enemies = [];
+        this.player.x = this.canvas.width / 2;
+        this.player.y = this.canvas.height / 2;
+        document.getElementById('score-display').textContent = 0;
+        document.getElementById('best-display').textContent = this.bestScore;
+    },
+
+    spawnEnemy() {
+        const side = Math.floor(Math.random() * 4);
+        let x, y, vx, vy;
+        const speed = 3 + (this.score / 80);
+        switch(side) {
+            case 0: x = Math.random()*this.canvas.width; y = -30; vx = (Math.random()-0.5)*3; vy = speed; break;
+            case 1: x = this.canvas.width+30; y = Math.random()*this.canvas.height; vx = -speed; vy = (Math.random()-0.5)*3; break;
+            case 2: x = Math.random()*this.canvas.width; y = this.canvas.height+30; vx = (Math.random()-0.5)*3; vy = -speed; break;
+            case 3: x = -30; y = Math.random()*this.canvas.height; vx = speed; vy = (Math.random()-0.5)*3; break;
+        }
+        this.enemies.push({ x, y, vx, vy, size: 8 + Math.random()*12 });
+    },
+
+    update() {
+        this.score++;
+        document.getElementById('score-display').textContent = this.score;
+
+        if (this.score % Math.max(8, 50 - Math.floor(this.score / 150)) === 0) {
+            this.spawnEnemy();
+        }
+
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            e.x += e.vx;
+            e.y += e.vy;
+
+            const dx = this.player.x - e.x;
+            const dy = this.player.y - e.y;
+            if (Math.sqrt(dx*dx + dy*dy) < this.player.size + e.size) {
+                this.gameOver();
+                return;
+            }
+
+            if (e.x < -100 || e.x > this.canvas.width+100 || e.y < -100 || e.y > this.canvas.height+100) {
+                this.enemies.splice(i, 1);
+            }
+        }
+    },
+
+    draw() {
+        this.ctx.fillStyle = 'rgba(5, 5, 5, 0.25)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Player
+        this.ctx.shadowBlur = 20;
+        this.ctx.shadowColor = '#00f3ff';
+        this.ctx.fillStyle = '#00f3ff';
+        this.ctx.beginPath();
+        this.ctx.arc(this.player.x, this.player.y, this.player.size, 0, Math.PI*2);
+        this.ctx.fill();
+
+        // Enemies
+        this.ctx.shadowColor = '#ff0055';
+        this.ctx.fillStyle = '#ff0055';
+        this.enemies.forEach(e => {
+            this.ctx.beginPath();
+            this.ctx.arc(e.x, e.y, e.size, 0, Math.PI*2);
+            this.ctx.fill();
+        });
+        this.ctx.shadowBlur = 0;
+    },
+
+    loop() {
+        if (!this.isRunning) return;
+        this.update();
+        this.draw();
+        this.animationId = requestAnimationFrame(() => this.loop());
+    },
+
+    async gameOver() {
+        this.isRunning = false;
+        cancelAnimationFrame(this.animationId);
+
+        document.getElementById('final-score').textContent = this.score;
+
+        // Сохраняем только лучший результат
+        const isNewRecord = await Leaderboard.saveBestScore(this.currentUser, this.uid, this.score);
+
+        const recordMsg = document.getElementById('new-record-msg');
+        if (isNewRecord) {
+            recordMsg.style.display = 'block';
+            this.bestScore = this.score;
+            document.getElementById('best-display').textContent = this.bestScore;
+        } else {
+            recordMsg.style.display = 'none';
+        }
+
+        UI.showScreen('gameover-screen');
+    }
+};
+
+// ==========================================
+// 5. UI
+// ==========================================
+const UI = {
+    showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        if (id) document.getElementById(id).classList.add('active');
+    }
+};
+
+// ==========================================
+// 6. EVENT LISTENERS
+// ==========================================
+
+// Играть
+document.getElementById('play-btn').addEventListener('click', () => {
+    Game.reset();
+    Game.isRunning = true;
+    Game.loop();
+    UI.showScreen(null);
+});
+
+// Ещё раз
+document.getElementById('restart-btn').addEventListener('click', () => {
+    Game.reset();
+    Game.isRunning = true;
+    Game.loop();
+    UI.showScreen(null);
+});
+
+// В меню
+document.getElementById('menu-btn').addEventListener('click', () => {
+    Leaderboard.loadTop10('menu');
+    UI.showScreen('menu-screen');
+});
+
+// Выйти
+document.getElementById('menu-logout').addEventListener('click', () => {
+    auth.signOut().then(() => location.reload());
+});
+
+// Init
+AuthUI.init();
+Game.start(); // Инициализируем canvas
+
+</script>
+</body>
+</html>
