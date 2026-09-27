@@ -308,7 +308,7 @@ const AuthUI = {
 };
 
 // ==========================================
-// 6. LEADERBOARD (fixed: .once instead of .on)
+// 6. LEADERBOARD (Firebase Realtime DB) + LOGS
 // ==========================================
 const Leaderboard = {
   async saveBestScore(nick, uid, newScore) {
@@ -335,6 +335,70 @@ const Leaderboard = {
       })
       .catch(err => console.error('Load best score error:', err));
   },
+
+  async refreshBestScore() {
+    if (!Game.uid) return;
+    try {
+      const snap = await db.ref('leaderboard/' + Game.uid + '/bestScore').once('value');
+      const best = snap.val() || 0;
+      Game.bestScore = best;
+      document.getElementById('best-display').textContent = best;
+    } catch (err) { console.error('Refresh best score error:', err); }
+  },
+
+  loadTop10(context) {
+    const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
+    const tableId = context === 'menu' ? 'menu-leaderboard' : null;
+    if (loaderId) {
+      document.getElementById(loaderId).style.display = 'inline-block';
+      document.getElementById(tableId).style.display = 'none';
+    }
+
+    // Запрос к базе
+    db.ref('leaderboard').orderByChild('bestScore').limitToLast(10).once('value')
+      .then(snapshot => {
+        // ЛОГ 1: Сырые данные из Firebase
+        console.log('🔥 RAW FIREBASE DATA:', snapshot.val());
+
+        const entries = [];
+        snapshot.forEach(child => entries.push({ uid: child.key, ...child.val() }));
+        
+        // ЛОГ 2: Обработанный массив до сортировки
+        console.log('📋 PARSED ENTRIES:', entries);
+
+        entries.sort((a, b) => b.bestScore - a.bestScore);
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = '';
+
+        if (entries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
+        } else {
+          entries.forEach((entry, i) => {
+            const tr = document.createElement('tr');
+            const rank = i + 1;
+            if (rank <= 3) tr.classList.add('rank-' + rank);
+            if (entry.uid === Game.uid) tr.classList.add('me');
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+            // XSS защита
+            tr.innerHTML = `<td>${medal}</td><td>${escapeHtml(entry.nick || '???')}</td><td>${escapeHtml(entry.bestScore)}</td>`;
+            tbody.appendChild(tr);
+          });
+        }
+      })
+      .catch(err => {
+        // ЛОГ 3: Ошибка доступа (если правила Firebase блокируют)
+        console.error('❌ LEADERBOARD ERROR:', err);
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки (см. консоль)</td></tr>';
+      })
+      .finally(() => {
+        if (loaderId) {
+          document.getElementById(loaderId).style.display = 'none';
+          document.getElementById(tableId).style.display = 'table';
+        }
+      });
+  }
+};
 
   async refreshBestScore() {
     if (!Game.uid) return;
