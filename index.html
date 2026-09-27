@@ -121,9 +121,11 @@ function escapeHtml(str) {
 // ==========================================
 // 1. CONFIG: MUSIC & BALANCE
 // ==========================================
+// Все треки должны быть перечислены здесь.
 const MUSIC_TRACKS = [
   'music/track-1.mp3',
-  'music/track-2.mp3'
+  'music/track-2.mp3',
+  'music/track-3.mp3'   // ← добавлен третий трек
 ];
 
 const BALANCE = {
@@ -204,7 +206,6 @@ const Music = {
     });
   },
 
-  // Выбирает случайный трек, исключая предыдущий (если треков > 1)
   playRandom() {
     if (MUSIC_TRACKS.length === 0) return;
     let idx;
@@ -220,7 +221,6 @@ const Music = {
     this.audio.play().catch(err => console.warn('Music blocked:', err));
   },
 
-  // Вызывается ТОЛЬКО из клика пользователя (startGame / restart)
   start() {
     this.playRandom();
   },
@@ -308,7 +308,7 @@ const AuthUI = {
 };
 
 // ==========================================
-// 6. LEADERBOARD
+// 6. LEADERBOARD (fixed: .once instead of .on)
 // ==========================================
 const Leaderboard = {
   async saveBestScore(nick, uid, newScore) {
@@ -323,14 +323,29 @@ const Leaderboard = {
       return false;
     } catch (err) { console.error('Save error:', err); return false; }
   },
+
   loadBestScore() {
     if (!Game.uid) return;
-    db.ref('leaderboard/' + Game.uid + '/bestScore').on('value', snap => {
+    db.ref('leaderboard/' + Game.uid + '/bestScore')
+      .once('value')
+      .then(snap => {
+        const best = snap.val() || 0;
+        Game.bestScore = best;
+        document.getElementById('best-display').textContent = best;
+      })
+      .catch(err => console.error('Load best score error:', err));
+  },
+
+  async refreshBestScore() {
+    if (!Game.uid) return;
+    try {
+      const snap = await db.ref('leaderboard/' + Game.uid + '/bestScore').once('value');
       const best = snap.val() || 0;
       Game.bestScore = best;
       document.getElementById('best-display').textContent = best;
-    });
+    } catch (err) { console.error('Refresh best score error:', err); }
   },
+
   loadTop10(context) {
     const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
     const tableId = context === 'menu' ? 'menu-leaderboard' : null;
@@ -634,8 +649,7 @@ const Game = {
     const recordMsg = document.getElementById('new-record-msg');
     if (isNewRecord) {
       recordMsg.style.display = 'block';
-      this.bestScore = this.score;
-      document.getElementById('best-display').textContent = this.bestScore;
+      await Leaderboard.refreshBestScore();
     } else {
       recordMsg.style.display = 'none';
     }
@@ -658,7 +672,7 @@ const UI = {
 // ==========================================
 function startGame() {
   if (Game.isRunning) return;
-  Music.start();           // ← новый случайный трек по каждому старту/рестарту
+  Music.start();
   Game.reset();
   Game.isRunning = true;
   document.body.classList.add('playing');
@@ -669,7 +683,7 @@ function returnToMenu() {
   Game.isRunning = false;
   Game.isPaused = false;
   cancelAnimationFrame(Game.animationId);
-  Music.pause();           // ← музыка стопается при выходе в меню
+  Music.pause();
   Game.reset();
   document.body.classList.remove('playing');
   Leaderboard.loadTop10('menu');
