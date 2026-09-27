@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Flow | Leaderboard</title>
+<style>
+:root { --bg:#050505; --neon-blue:#00f3ff; --neon-red:#ff0055; --text:#fff; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:'Courier New',monospace; overflow:hidden; display:flex; justify-content:center; align-items:center; height:100vh; }
+.screen { position:absolute; text-align:center; background:rgba(0,0,0,0.95); padding:2rem; border:2px solid var(--neon-blue); box-shadow:0 0 20px var(--neon-blue); border-radius:10px; display:none; z-index:10; min-width:340px; max-width:90vw; max-height:90vh; overflow-y:auto; }
+.screen.active { display:block; }
+#pause-screen { background:rgba(0,0,0,0.75); backdrop-filter: blur(3px); }
+h1 { color:var(--neon-blue); text-shadow:0 0 10px var(--neon-blue); margin-bottom:1rem; font-size:2rem; }
+h3 { color:var(--neon-blue); margin:15px 0 10px; }
+input { display:block; width:100%; box-sizing:border-box; padding:12px; margin:10px 0; background:#111; border:1px solid var(--neon-blue); color:white; font-family:inherit; outline:none; border-radius:4px; }
+input:focus { box-shadow:0 0 10px var(--neon-blue); border-color:white; }
+button { width:100%; background:var(--neon-blue); color:black; border:none; padding:14px; font-weight:bold; cursor:pointer; margin-top:12px; font-family:inherit; text-transform:uppercase; transition:0.2s; border-radius:4px; font-size:1rem; }
+button:hover { background:white; box-shadow:0 0 15px white; }
+button:disabled { opacity:0.5; cursor:not-allowed; }
+.toggle-link { margin-top:12px; font-size:0.85rem; cursor:pointer; text-decoration:underline; color:#aaa; display:block; user-select:none; }
+.toggle-link:hover { color:white; }
+.error-msg { color:var(--neon-red); font-size:0.85rem; min-height:1.2em; margin-top:5px; }
+canvas { position:absolute; top:0; left:0; z-index:1; display:block; }
+#hud { position:absolute; top:20px; left:20px; font-size:1.3rem; pointer-events:none; z-index:5; text-shadow:0 0 10px var(--neon-blue); line-height:1.6; }
+#pause-hint { position:absolute; bottom:20px; right:20px; font-size:0.85rem; pointer-events:none; z-index:5; color:#888; text-shadow:0 0 6px var(--neon-blue); display:none; }
+body.playing #pause-hint { display:block; }
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+th, td { padding:8px 6px; text-align:left; border-bottom:1px solid #222; font-size:0.9rem; }
+th { color:var(--neon-blue); text-transform:uppercase; font-size:0.75rem; letter-spacing:1px; }
+tr.me td { color:var(--neon-blue); font-weight:bold; text-shadow:0 0 6px var(--neon-blue); }
+tr:nth-child(even) { background:rgba(255,255,255,0.02); }
+.rank-1 td { color:#ffd700 !important; text-shadow:0 0 8px #ffd700 !important; }
+.rank-2 td { color:#c0c0c0 !important; }
+.rank-3 td { color:#cd7f32 !important; }
+.loader { display:inline-block; width:20px; height:20px; border:3px solid rgba(255,255,255,.2); border-radius:50%; border-top-color:var(--neon-blue); animation:spin 0.8s linear infinite; margin:15px auto; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.user-info { font-size:0.8rem; color:#888; margin-bottom:10px; }
+.user-info span { color:var(--neon-blue); }
+</style>
+</head>
+<body>
+
+<!-- ========== AUTH SCREEN ========== -->
+<div id="auth-screen" class="screen active">
+  <h1>NEON FLOW</h1>
+  <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">Уклоняйся от красного. Стань первым.</p>
+  <input type="text" id="nickname" placeholder="Никнейм (до 15 символов)" maxlength="15" autocomplete="off">
+  <input type="password" id="password" placeholder="Пароль (мин. 6 символов)" autocomplete="new-password">
+  <div id="auth-error" class="error-msg"></div>
+  <button id="auth-btn">ВОЙТИ</button>
+  <span class="toggle-link" id="toggle-auth">Нет аккаунта? Зарегистрироваться</span>
+</div>
+
+<!-- ========== MENU SCREEN ========== -->
+<div id="menu-screen" class="screen">
+  <h1>NEON FLOW</h1>
+  <div class="user-info">Игрок: <span id="menu-nick">—</span></div>
+  <button id="play-btn">▶ ИГРАТЬ</button>
+  <h3>🏆 Топ-10 игроков</h3>
+  <div id="menu-lb-loader" class="loader"></div>
+  <table id="menu-leaderboard" style="display:none;">
+    <thead><tr><th>#</th><th>Игрок</th><th>Рекорд</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <span class="toggle-link" id="menu-logout">Выйти из аккаунта</span>
+</div>
+
+<!-- ========== PAUSE SCREEN ========== -->
+<div id="pause-screen" class="screen">
+  <h1>⏸ PAUSED</h1>
+  <p style="color:#aaa; font-size:0.9rem; margin-bottom:10px;">Текущий счёт: <span id="pause-score" style="color:var(--neon-blue); font-weight:bold;">0</span></p>
+  <button id="resume-btn">▶ ПРОДОЛЖИТЬ</button>
+  <button id="pause-restart-btn" style="background:transparent; border:1px solid var(--neon-blue); color:var(--neon-blue);">↻ РЕСТАРТ</button>
+  <button id="pause-menu-btn" style="background:transparent; border:1px solid var(--neon-red); color:var(--neon-red);">✖ В МЕНЮ</button>
+  <p style="color:#666; font-size:0.8rem; margin-top:15px;">ESC — продолжить</p>
+</div>
+
+<!-- ========== GAME OVER SCREEN ========== -->
+<div id="gameover-screen" class="screen">
+  <h1 style="color:var(--neon-red)">GAME OVER</h1>
+  <p style="font-size:1.1rem;">Счёт: <span id="final-score" style="color:var(--neon-blue); font-weight:bold;">0</span></p>
+  <p id="new-record-msg" style="color:#ffd700; display:none; font-weight:bold;">🎉 НОВЫЙ РЕКОРД!</p>
+  <button id="restart-btn">ЕЩЁ РАЗ</button>
+  <button id="menu-btn" style="background:transparent; border:1px solid var(--neon-blue); color:var(--neon-blue);">В МЕНЮ</button>
+</div>
+
+<!-- ========== HUD ========== -->
+<div id="hud">
+  SCORE: <span id="score-display">0</span><br>
+  BEST: <span id="best-display">0</span><br>
+  ZONE: <span id="zone-display">1</span>
+</div>
+<div id="pause-hint">ESC — пауза</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<!-- ========== FIREBASE SDK ========== -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ==========================================
+// 0. UTILS
+// ==========================================
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+}
+
+// ==========================================
+// 1. CONFIG: BACKGROUNDS & BALANCE
+// ==========================================
+const BG_TIERS = [
+  { score: 0,    src: 'assets/bg-0.jpg' },
+  { score: 1000, src: 'assets/bg-1.jpg' },
+  { score: 2000, src: 'assets/bg-2.jpg' },
+  { score: 3000, src: 'assets/bg-3.jpg' }
+];
+
+const BALANCE = {
+  X0: 1.5,
+  SPEED_SCALE: 0.05,
+  START_OFFSET: 3750,
+  SPAWN_START: 90,
+  SPAWN_MIN: 20,
+  SPAWN_DECAY: 0.9,
+  BURST_STEP: 2500,
+  BURST_MAX_EXTRA: 3,
+  CAP_START: 6,
+  CAP_STEP: 6,
+  SCORE_PER_CAP: 350,
+  CAP_MAX: 2500,
+  ARC_CHANCE: 0.35,
+  GLOW_ENEMY_LIMIT: 60
+};
+
+// ==========================================
+// 2. FIREBASE INIT
+// ==========================================
+const firebaseConfig = {
+  apiKey: "AIzaSyBfgo2eT_1n5XSvSXqX0zqUjqUWc9dYI2M",
+  authDomain: "flow-game-976be.firebaseapp.com",
+  databaseURL: "https://flow-game-976be-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "flow-game-976be",
+  storageBucket: "flow-game-976be.firebasestorage.app",
+  messagingSenderId: "1036692034335",
+  appId: "1:1036692034335:web:aeba59c273c1bc4095962a",
+  measurementId: "G-LHJEHJ1D02"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+// ==========================================
+// 3. BACKGROUND MANAGER
+// ==========================================
+const Background = {
+  ALPHA: 0.4, DIM: 0.2, FADE_FRAMES: 90,
+  images: [], index: 0, prevIndex: -1, fade: 1,
+  init() {
+    this.images = BG_TIERS.map(t => {
+      const img = new Image();
+      img.src = t.src;
+      const entry = { score: t.score, img, loaded: false };
+      img.onload = () => { entry.loaded = true; };
+      img.onerror = () => { console.warn('BG not loaded:', t.src); };
+      return entry;
+    });
+  },
+  reset() { this.index = 0; this.prevIndex = -1; this.fade = 1; },
+  tierFor(score) {
+    let idx = 0;
+    for (let i = 0; i < this.images.length; i++) if (score >= this.images[i].score) idx = i;
+    return idx;
+  },
+  update(score) {
+    const target = this.tierFor(score);
+    if (target !== this.index) { this.prevIndex = this.index; this.index = target; this.fade = 0; }
+    if (this.fade < 1) this.fade = Math.min(1, this.fade + 1 / this.FADE_FRAMES);
+  },
+  drawTier(ctx, w, h, i, alpha) {
+    const t = this.images[i];
+    if (!t || !t.loaded || alpha <= 0) return false;
+    const s = Math.max(w / t.img.width, h / t.img.height);
+    const dw = t.img.width * s, dh = t.img.height * s;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(t.img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    return true;
+  },
+  draw(ctx, w, h) {
+    let covered = false;
+    if (this.fade < 1 && this.prevIndex >= 0)
+      covered = this.drawTier(ctx, w, h, this.prevIndex, this.ALPHA) || covered;
+    const curAlpha = this.fade < 1 ? this.ALPHA * this.fade : this.ALPHA;
+    covered = this.drawTier(ctx, w, h, this.index, curAlpha) || covered;
+    if (!covered) { ctx.globalAlpha = this.ALPHA; ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, w, h); }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(5,5,5,' + this.DIM + ')';
+    ctx.fillRect(0, 0, w, h);
+  }
+};
+
+// ==========================================
+// 4. AUTH
+// ==========================================
+const AuthUI = {
+  isRegistering: false,
+  FAKE_DOMAIN: '@neonflow.game',
+  init() {
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        Game.currentUser = user.displayName || user.email.split('@')[0];
+        Game.uid = user.uid;
+        document.getElementById('menu-nick').textContent = Game.currentUser;
+        Leaderboard.loadBestScore();
+        Leaderboard.loadTop10('menu');
+        UI.showScreen('menu-screen');
+      } else {
+        UI.showScreen('auth-screen');
+      }
+    });
+    document.getElementById('auth-btn').addEventListener('click', () => this.handleAuth());
+    document.getElementById('toggle-auth').addEventListener('click', () => this.toggleMode());
+    document.getElementById('password').addEventListener('keypress', e => { if (e.key === 'Enter') this.handleAuth(); });
+  },
+  toggleMode() {
+    this.isRegistering = !this.isRegistering;
+    document.getElementById('auth-error').textContent = '';
+    document.getElementById('auth-btn').textContent = this.isRegistering ? 'ЗАРЕГИСТРИРОВАТЬСЯ' : 'ВОЙТИ';
+    document.getElementById('toggle-auth').textContent = this.isRegistering ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
+  },
+  async handleAuth() {
+    const nick = document.getElementById('nickname').value.trim().slice(0, 15);
+    const pass = document.getElementById('password').value;
+    const errorDiv = document.getElementById('auth-error');
+    const btn = document.getElementById('auth-btn');
+    errorDiv.textContent = '';
+    if (!nick) { errorDiv.textContent = 'Введите никнейм'; return; }
+    if (pass.length < 6) { errorDiv.textContent = 'Пароль минимум 6 символов'; return; }
+    const email = nick.toLowerCase().replace(/\s+/g, '.') + this.FAKE_DOMAIN;
+    btn.disabled = true; btn.textContent = '...';
+    try {
+      if (this.isRegistering) {
+        const cred = await auth.createUserWithEmailAndPassword(email, pass);
+        await cred.user.updateProfile({ displayName: nick });
+        Game.currentUser = nick;
+        document.getElementById('menu-nick').textContent = nick;
+      } else {
+        await auth.signInWithEmailAndPassword(email, pass);
+      }
+    } catch (err) {
+      let msg = 'Ошибка: ' + err.code;
+      switch (err.code) {
+        case 'auth/email-already-in-use': msg = 'Ник уже занят'; break;
+        case 'auth/wrong-password': case 'auth/user-not-found': case 'auth/invalid-credential': msg = 'Неверный ник или пароль'; break;
+        case 'auth/operation-not-allowed': msg = 'Включите Email/Password в Firebase!'; break;
+        case 'auth/network-request-failed': msg = 'Нет связи с сервером'; break;
+        case 'auth/too-many-requests': msg = 'Слишком много попыток, подождите'; break;
+      }
+      errorDiv.textContent = msg;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = this.isRegistering ? 'ЗАРЕГИСТРИРОВАТЬСЯ' : 'ВОЙТИ';
+    }
+  }
+};
+
+// ==========================================
+// 5. LEADERBOARD
+// ==========================================
+const Leaderboard = {
+  async saveBestScore(nick, uid, newScore) {
+    const userRef = db.ref('leaderboard/' + uid);
+    try {
+      const snapshot = await userRef.once('value');
+      const existing = snapshot.val();
+      if (!existing || newScore > existing.bestScore) {
+        await userRef.set({ nick, bestScore: newScore, updatedAt: firebase.database.ServerValue.TIMESTAMP });
+        return true;
+      }
+      return false;
+    } catch (err) { console.error('Save error:', err); return false; }
+  },
+  loadBestScore() {
+    if (!Game.uid) return;
+    db.ref('leaderboard/' + Game.uid + '/bestScore').on('value', snap => {
+      const best = snap.val() || 0;
+      Game.bestScore = best;
+      document.getElementById('best-display').textContent = best;
+    });
+  },
+  loadTop10(context) {
+    const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
+    const tableId = context === 'menu' ? 'menu-leaderboard' : null;
+    if (loaderId) {
+      document.getElementById(loaderId).style.display = 'inline-block';
+      document.getElementById(tableId).style.display = 'none';
+    }
+    db.ref('leaderboard').orderByChild('bestScore').limitToLast(10).once('value')
+      .then(snapshot => {
+        const entries = [];
+        snapshot.forEach(child => entries.push({ uid: child.key, ...child.val() }));
+        entries.sort((a, b) => b.bestScore - a.bestScore);
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = '';
+        if (entries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
+        } else {
+          entries.forEach((entry, i) => {
+            const tr = document.createElement('tr');
+            const rank = i + 1;
+            if (rank <= 3) tr.classList.add('rank-' + rank);
+            if (entry.uid === Game.uid) tr.classList.add('me');
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+            tr.innerHTML = `<td>${medal}</td><td>${escapeHtml(entry.nick || '???')}</td><td>${escapeHtml(entry.bestScore)}</td>`;
+            tbody.appendChild(tr);
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Leaderboard load error:', err);
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки</td></tr>';
+      })
+      .finally(() => {
+        if (loaderId) {
+          document.getElementById(loaderId).style.display = 'none';
+          document.getElementById(tableId).style.display = 'table';
+        }
+      });
+  }
+};
+
+// ==========================================
+// 6. GAME ENGINE
+// ==========================================
+const Game = {
+  canvas: document.getElementById('gameCanvas'),
+  ctx: null,
+  player: { x: 0, y: 0, size: 12 },
+  enemies: [], particles: [],
+  score: 0, bestScore: 0,
+  spawnTimer: 0, isDying: 0,
+  isPaused: false,
+  lastZone: 1, animationId: null, isRunning: false,
+  currentUser: null, uid: null,
+
+  start() {
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    const moveHandler = (e) => {
+      if (!this.isRunning || this.isDying > 0 || this.isPaused) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      this.player.x = cx - rect.left;
+      this.player.y = cy - rect.top;
+    };
+    window.addEventListener('mousemove', moveHandler);
+    window.addEventListener('touchmove', moveHandler, { passive: true });
+    window.addEventListener('touchstart', moveHandler, { passive: true });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (this.isPaused) this.resume();
+        else this.pause();
+      }
+    });
+  },
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  },
+  reset() {
+    this.score = 0;
+    this.enemies = [];
+    this.particles = [];
+    this.spawnTimer = 0;
+    this.isDying = 0;
+    this.isPaused = false;
+    this.lastZone = 1;
+    Background.reset();
+    this.player.x = this.canvas.width / 2;
+    this.player.y = this.canvas.height / 2;
+    document.getElementById('score-display').textContent = 0;
+    document.getElementById('best-display').textContent = this.bestScore;
+    document.getElementById('zone-display').textContent = 1;
+  },
+
+  // --- pause ---
+  pause() {
+    // пауза доступна только во время активной игры (не в меню, не во время смерти)
+    if (!this.isRunning || this.isDying > 0 || this.isPaused) return;
+    this.isPaused = true;
+    this.isRunning = false;
+    cancelAnimationFrame(this.animationId);
+    document.getElementById('pause-score').textContent = this.score;
+    document.body.classList.remove('playing');
+    UI.showScreen('pause-screen');
+  },
+  resume() {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.isRunning = true;
+    UI.showScreen(null);
+    document.body.classList.add('playing');
+    this.loop();
+  },
+
+  difficultyScore() { return this.score + BALANCE.START_OFFSET; },
+  currentSpeed() { return BALANCE.X0 + Math.sqrt(this.difficultyScore()) * BALANCE.SPEED_SCALE; },
+  maxEnemies() {
+    return Math.min(BALANCE.CAP_MAX,
+      BALANCE.CAP_START + Math.floor(this.score / BALANCE.SCORE_PER_CAP) * BALANCE.CAP_STEP);
+  },
+
+  makeEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    const speed = this.currentSpeed();
+    const M = 40;
+    let x, y, angle;
+    switch (side) {
+      case 0: x = Math.random() * this.canvas.width; y = -M;
+              angle = Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
+      case 1: x = this.canvas.width + M; y = Math.random() * this.canvas.height;
+              angle = Math.PI + (Math.random() - 0.5) * 0.9; break;
+      case 2: x = Math.random() * this.canvas.width; y = this.canvas.height + M;
+              angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
+      default: x = -M; y = Math.random() * this.canvas.height;
+              angle = (Math.random() - 0.5) * 0.9; break;
+    }
+    const arc = Math.random() < BALANCE.ARC_CHANCE
+      ? { va: (Math.random() < 0.5 ? -1 : 1) * (0.012 + Math.random() * 0.018),
+          life: 60 + Math.random() * 80 }
+      : null;
+    return { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+             size: 8 + Math.random() * 10, arc };
+  },
+  spawnEnemy() {
+    if (this.enemies.length >= this.maxEnemies()) return;
+    this.enemies.push(this.makeEnemy());
+  },
+
+  addParticle(p) { if (this.particles.length < 350) this.particles.push(p); },
+  spawnTrail() {
+    const count = 1 + Math.min(2, Background.index);
+    for (let i = 0; i < count; i++) {
+      this.addParticle({
+        x: this.player.x + (Math.random() - 0.5) * 8,
+        y: this.player.y + (Math.random() - 0.5) * 8,
+        vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6,
+        life: 18 + Math.random() * 12, maxLife: 30,
+        size: 1.5 + Math.random() * 2, color: '0,243,255'
+      });
+    }
+  },
+  explode(x, y) {
+    const n = 40 + Background.index * 12;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1 + Math.random() * 5;
+      this.addParticle({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 30 + Math.random() * 25, maxLife: 55,
+        size: 1.5 + Math.random() * 3,
+        color: Math.random() < 0.5 ? '255,0,85' : '0,243,255'
+      });
+    }
+  },
+  updateParticles() {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.98; p.vy *= 0.98;
+      p.life--;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+  },
+  drawParticles() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowBlur = 0;
+    for (const p of this.particles) {
+      const a = Math.max(0, p.life / p.maxLife);
+      ctx.fillStyle = `rgba(${p.color},${a.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  updateZoneHud() {
+    const z = Background.index + 1;
+    if (z !== this.lastZone) {
+      this.lastZone = z;
+      document.getElementById('zone-display').textContent = z;
+    }
+  },
+  update() {
+    Background.update(this.score);
+    this.updateZoneHud();
+
+    if (this.isDying > 0) {
+      for (const e of this.enemies) { e.x += e.vx; e.y += e.vy; }
+      this.updateParticles();
+      this.isDying--;
+      if (this.isDying === 0) this.finishGameOver();
+      return;
+    }
+
+    this.score++;
+    document.getElementById('score-display').textContent = this.score;
+
+    this.spawnTimer++;
+    const ds = this.difficultyScore();
+    const interval = Math.max(BALANCE.SPAWN_MIN,
+      BALANCE.SPAWN_START - Math.sqrt(ds) * BALANCE.SPAWN_DECAY);
+    if (this.spawnTimer >= interval) {
+      this.spawnTimer = 0;
+      const burst = 1 + Math.min(BALANCE.BURST_MAX_EXTRA, Math.floor(ds / BALANCE.BURST_STEP));
+      for (let i = 0; i < burst; i++) this.spawnEnemy();
+    }
+
+    this.spawnTrail();
+    this.updateParticles();
+
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.arc && e.arc.life > 0) {
+        const c = Math.cos(e.arc.va), s = Math.sin(e.arc.va);
+        const nvx = e.vx * c - e.vy * s;
+        e.vy = e.vx * s + e.vy * c;
+        e.vx = nvx;
+        e.arc.life--;
+      }
+      e.x += e.vx;
+      e.y += e.vy;
+      const dx = this.player.x - e.x;
+      const dy = this.player.y - e.y;
+      if (Math.sqrt(dx * dx + dy * dy) < this.player.size + e.size) {
+        this.die();
+        return;
+      }
+      if (e.x < -150 || e.x > this.canvas.width + 150 ||
+          e.y < -150 || e.y > this.canvas.height + 150) {
+        this.enemies.splice(i, 1);
+      }
+    }
+  },
+  draw() {
+    Background.draw(this.ctx, this.canvas.width, this.canvas.height);
+    this.drawParticles();
+    if (this.isDying === 0) {
+      this.ctx.shadowBlur = 20;
+      this.ctx.shadowColor = '#00f3ff';
+      this.ctx.fillStyle = '#00f3ff';
+      this.ctx.beginPath();
+      this.ctx.arc(this.player.x, this.player.y, this.player.size, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+    const useGlow = this.enemies.length <= BALANCE.GLOW_ENEMY_LIMIT;
+    this.ctx.shadowBlur = useGlow ? 15 : 0;
+    this.ctx.shadowColor = '#ff0055';
+    this.ctx.fillStyle = '#ff0055';
+    for (const e of this.enemies) {
+      this.ctx.beginPath();
+      this.ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+    this.ctx.shadowBlur = 0;
+  },
+  loop() {
+    if (!this.isRunning) return;
+    this.update();
+    this.draw();
+    this.animationId = requestAnimationFrame(() => this.loop());
+  },
+  die() {
+    this.explode(this.player.x, this.player.y);
+    this.isDying = 50;
+  },
+  async finishGameOver() {
+    this.isRunning = false;
+    this.isPaused = false; // страховка
+    cancelAnimationFrame(this.animationId);
+    document.body.classList.remove('playing');
+    document.getElementById('final-score').textContent = this.score;
+    const isNewRecord = await Leaderboard.saveBestScore(this.currentUser, this.uid, this.score);
+    const recordMsg = document.getElementById('new-record-msg');
+    if (isNewRecord) {
+      recordMsg.style.display = 'block';
+      this.bestScore = this.score;
+      document.getElementById('best-display').textContent = this.bestScore;
+    } else {
+      recordMsg.style.display = 'none';
+    }
+    UI.showScreen('gameover-screen');
+  }
+};
+
+// ==========================================
+// 7. UI
+// ==========================================
+const UI = {
+  showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    if (id) document.getElementById(id).classList.add('active');
+  }
+};
+
+// ==========================================
+// 8. EVENT LISTENERS
+// ==========================================
+function startGame() {
+  if (Game.isRunning) return;
+  Game.reset();
+  Game.isRunning = true;
+  document.body.classList.add('playing');
+  Game.loop();
+  UI.showScreen(null);
+}
+function returnToMenu() {
+  Game.isRunning = false;
+  Game.isPaused = false;
+  cancelAnimationFrame(Game.animationId);
+  Game.reset();
+  document.body.classList.remove('playing');
+  Leaderboard.loadTop10('menu');
+  UI.showScreen('menu-screen');
+}
+
+document.getElementById('play-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+document.getElementById('menu-btn').addEventListener('click', returnToMenu);
+
+// Pause menu buttons
+document.getElementById('resume-btn').addEventListener('click', () => Game.resume());
+document.getElementById('pause-restart-btn').addEventListener('click', startGame);
+document.getElementById('pause-menu-btn').addEventListener('click', returnToMenu);
+
+document.getElementById('menu-logout').addEventListener('click', () => auth.signOut());
+
+// Init
+Background.init();
+AuthUI.init();
+Game.start();
+</script>
+</body>
+</html>
