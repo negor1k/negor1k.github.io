@@ -309,19 +309,30 @@ const Leaderboard = {
       document.getElementById(loaderId).style.display = 'inline-block';
       document.getElementById(tableId).style.display = 'none';
     }
-    
-    db.ref('leaderboard').orderByChild('bestScore').limitToLast(10).once('value')
+    db.ref('leaderboard')
+      .orderByChild('bestScore')
+      .limitToLast(10)
+      .once('value')
       .then(snapshot => {
-        console.log('🔥 RAW DATA:', snapshot.val()); // ЛОГ 1
-        const entries = [];
-        snapshot.forEach(child => entries.push({ uid: child.key, ...child.val() }));
-        console.log('📋 PARSED:', entries); // ЛОГ 2
+        const data = snapshot.val();
+        console.log('🔥 RAW DATA:', data); // Лог для проверки
         
+        let entries = [];
+        if (data) {
+          // Превращаем объект {uid: {...}, uid2: {...}} в массив [{...}, {...}]
+          entries = Object.keys(data).map(key => ({
+            uid: key,
+            ...data[key]
+          }));
+        }
+        
+        console.log('📋 PARSED:', entries); // Лог для проверки
+
         entries.sort((a, b) => b.bestScore - a.bestScore);
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = '';
         if (entries.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Нет рекордов</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
         } else {
           entries.forEach((entry, i) => {
             const tr = document.createElement('tr');
@@ -335,9 +346,9 @@ const Leaderboard = {
         }
       })
       .catch(err => {
-        console.error('❌ LB ERROR:', err); // ЛОГ 3
+        console.error('Leaderboard load error:', err);
         const tbody = document.querySelector(`#${tableId} tbody`);
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:red;">Ошибка доступа</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки</td></tr>';
       })
       .finally(() => {
         if (loaderId) {
