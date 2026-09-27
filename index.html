@@ -121,28 +121,18 @@ function escapeHtml(str) {
 // ==========================================
 // 1. CONFIG: MUSIC & BALANCE
 // ==========================================
-// Все треки должны быть перечислены здесь.
 const MUSIC_TRACKS = [
   'music/track-1.mp3',
   'music/track-2.mp3',
-  'music/track-3.mp3'   // ← добавлен третий трек
+  'music/track-3.mp3'
 ];
 
 const BALANCE = {
-  X0: 1.5,
-  SPEED_SCALE: 0.05,
-  START_OFFSET: 3750,
-  SPAWN_START: 90,
-  SPAWN_MIN: 20,
-  SPAWN_DECAY: 0.9,
-  BURST_STEP: 2500,
-  BURST_MAX_EXTRA: 3,
-  CAP_START: 6,
-  CAP_STEP: 6,
-  SCORE_PER_CAP: 350,
-  CAP_MAX: 2500,
-  ARC_CHANCE: 0.35,
-  GLOW_ENEMY_LIMIT: 60
+  X0: 1.5, SPEED_SCALE: 0.05, START_OFFSET: 3750,
+  SPAWN_START: 90, SPAWN_MIN: 20, SPAWN_DECAY: 0.9,
+  BURST_STEP: 2500, BURST_MAX_EXTRA: 3,
+  CAP_START: 6, CAP_STEP: 6, SCORE_PER_CAP: 350, CAP_MAX: 2500,
+  ARC_CHANCE: 0.35, GLOW_ENEMY_LIMIT: 60
 };
 
 // ==========================================
@@ -163,12 +153,10 @@ const auth = firebase.auth();
 const db = firebase.database();
 
 // ==========================================
-// 3. WORLD (чёрный фон + трейлы + зоны)
+// 3. WORLD (Black BG + Trails)
 // ==========================================
 const World = {
-  ZONE_SCORE: 1000,
-  TRAIL_ALPHA: 0.35,
-  zone: 0,
+  ZONE_SCORE: 1000, TRAIL_ALPHA: 0.35, zone: 0,
   reset() { this.zone = 0; },
   update(score) { this.zone = Math.floor(score / this.ZONE_SCORE); },
   draw(ctx, w, h) {
@@ -179,23 +167,17 @@ const World = {
 };
 
 // ==========================================
-// 4. MUSIC MANAGER (random + pause/resume)
+// 4. MUSIC MANAGER
 // ==========================================
 const Music = {
-  audio: null,
-  lastTrackIndex: -1,
-  volume: 0.5,
-  STORAGE_KEY: 'neonflow_volume',
-
+  audio: null, lastTrackIndex: -1, volume: 0.5, STORAGE_KEY: 'neonflow_volume',
   init() {
     this.audio = new Audio();
     this.audio.preload = 'auto';
     this.audio.addEventListener('ended', () => this.playRandom());
-
     const saved = parseFloat(localStorage.getItem(this.STORAGE_KEY));
     if (!isNaN(saved)) this.volume = Math.max(0, Math.min(1, saved / 100));
     this.audio.volume = this.volume;
-
     const slider = document.getElementById('volume-slider');
     const label = document.getElementById('volume-value');
     slider.value = Math.round(this.volume * 100);
@@ -205,36 +187,19 @@ const Music = {
       label.textContent = slider.value + '%';
     });
   },
-
   playRandom() {
     if (MUSIC_TRACKS.length === 0) return;
     let idx;
-    if (MUSIC_TRACKS.length === 1) {
-      idx = 0;
-    } else {
-      do { idx = Math.floor(Math.random() * MUSIC_TRACKS.length); }
-      while (idx === this.lastTrackIndex);
-    }
+    if (MUSIC_TRACKS.length === 1) idx = 0;
+    else { do { idx = Math.floor(Math.random() * MUSIC_TRACKS.length); } while (idx === this.lastTrackIndex); }
     this.lastTrackIndex = idx;
     this.audio.src = MUSIC_TRACKS[idx];
     this.audio.volume = this.volume;
     this.audio.play().catch(err => console.warn('Music blocked:', err));
   },
-
-  start() {
-    this.playRandom();
-  },
-
-  pause() {
-    if (this.audio && !this.audio.paused) this.audio.pause();
-  },
-
-  resume() {
-    if (this.audio && this.audio.paused && this.audio.currentTime > 0) {
-      this.audio.play().catch(() => {});
-    }
-  },
-
+  start() { this.playRandom(); },
+  pause() { if (this.audio && !this.audio.paused) this.audio.pause(); },
+  resume() { if (this.audio && this.audio.paused && this.audio.currentTime > 0) this.audio.play().catch(() => {}); },
   setVolume(v) {
     this.volume = Math.max(0, Math.min(1, v));
     this.audio.volume = this.volume;
@@ -243,11 +208,10 @@ const Music = {
 };
 
 // ==========================================
-// 5. AUTH (Nick + Password)
+// 5. AUTH
 // ==========================================
 const AuthUI = {
-  isRegistering: false,
-  FAKE_DOMAIN: '@neonflow.game',
+  isRegistering: false, FAKE_DOMAIN: '@neonflow.game',
   init() {
     auth.onAuthStateChanged(user => {
       if (user) {
@@ -297,7 +261,7 @@ const AuthUI = {
         case 'auth/wrong-password': case 'auth/user-not-found': case 'auth/invalid-credential': msg = 'Неверный ник или пароль'; break;
         case 'auth/operation-not-allowed': msg = 'Включите Email/Password в Firebase!'; break;
         case 'auth/network-request-failed': msg = 'Нет связи с сервером'; break;
-        case 'auth/too-many-requests': msg = 'Слишком много попыток, подождите'; break;
+        case 'auth/too-many-requests': msg = 'Слишком много попыток'; break;
       }
       errorDiv.textContent = msg;
     } finally {
@@ -308,7 +272,7 @@ const AuthUI = {
 };
 
 // ==========================================
-// 6. LEADERBOARD (Firebase Realtime DB) + LOGS
+// 6. LEADERBOARD (FIXED + LOGS)
 // ==========================================
 const Leaderboard = {
   async saveBestScore(nick, uid, newScore) {
@@ -323,29 +287,21 @@ const Leaderboard = {
       return false;
     } catch (err) { console.error('Save error:', err); return false; }
   },
-
   loadBestScore() {
     if (!Game.uid) return;
-    db.ref('leaderboard/' + Game.uid + '/bestScore')
-      .once('value')
-      .then(snap => {
-        const best = snap.val() || 0;
-        Game.bestScore = best;
-        document.getElementById('best-display').textContent = best;
-      })
-      .catch(err => console.error('Load best score error:', err));
+    db.ref('leaderboard/' + Game.uid + '/bestScore').once('value').then(snap => {
+      Game.bestScore = snap.val() || 0;
+      document.getElementById('best-display').textContent = Game.bestScore;
+    }).catch(err => console.error('Load best error:', err));
   },
-
   async refreshBestScore() {
     if (!Game.uid) return;
     try {
       const snap = await db.ref('leaderboard/' + Game.uid + '/bestScore').once('value');
-      const best = snap.val() || 0;
-      Game.bestScore = best;
-      document.getElementById('best-display').textContent = best;
-    } catch (err) { console.error('Refresh best score error:', err); }
+      Game.bestScore = snap.val() || 0;
+      document.getElementById('best-display').textContent = Game.bestScore;
+    } catch (err) { console.error('Refresh error:', err); }
   },
-
   loadTop10(context) {
     const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
     const tableId = context === 'menu' ? 'menu-leaderboard' : null;
@@ -353,79 +309,19 @@ const Leaderboard = {
       document.getElementById(loaderId).style.display = 'inline-block';
       document.getElementById(tableId).style.display = 'none';
     }
-
-    // Запрос к базе
+    
     db.ref('leaderboard').orderByChild('bestScore').limitToLast(10).once('value')
       .then(snapshot => {
-        // ЛОГ 1: Сырые данные из Firebase
-        console.log('🔥 RAW FIREBASE DATA:', snapshot.val());
-
+        console.log('🔥 RAW DATA:', snapshot.val()); // ЛОГ 1
         const entries = [];
         snapshot.forEach(child => entries.push({ uid: child.key, ...child.val() }));
+        console.log('📋 PARSED:', entries); // ЛОГ 2
         
-        // ЛОГ 2: Обработанный массив до сортировки
-        console.log('📋 PARSED ENTRIES:', entries);
-
-        entries.sort((a, b) => b.bestScore - a.bestScore);
-        const tbody = document.querySelector(`#${tableId} tbody`);
-        tbody.innerHTML = '';
-
-        if (entries.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
-        } else {
-          entries.forEach((entry, i) => {
-            const tr = document.createElement('tr');
-            const rank = i + 1;
-            if (rank <= 3) tr.classList.add('rank-' + rank);
-            if (entry.uid === Game.uid) tr.classList.add('me');
-            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-            // XSS защита
-            tr.innerHTML = `<td>${medal}</td><td>${escapeHtml(entry.nick || '???')}</td><td>${escapeHtml(entry.bestScore)}</td>`;
-            tbody.appendChild(tr);
-          });
-        }
-      })
-      .catch(err => {
-        // ЛОГ 3: Ошибка доступа (если правила Firebase блокируют)
-        console.error('❌ LEADERBOARD ERROR:', err);
-        const tbody = document.querySelector(`#${tableId} tbody`);
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки (см. консоль)</td></tr>';
-      })
-      .finally(() => {
-        if (loaderId) {
-          document.getElementById(loaderId).style.display = 'none';
-          document.getElementById(tableId).style.display = 'table';
-        }
-      });
-  }
-};
-
-  async refreshBestScore() {
-    if (!Game.uid) return;
-    try {
-      const snap = await db.ref('leaderboard/' + Game.uid + '/bestScore').once('value');
-      const best = snap.val() || 0;
-      Game.bestScore = best;
-      document.getElementById('best-display').textContent = best;
-    } catch (err) { console.error('Refresh best score error:', err); }
-  },
-
-  loadTop10(context) {
-    const loaderId = context === 'menu' ? 'menu-lb-loader' : null;
-    const tableId = context === 'menu' ? 'menu-leaderboard' : null;
-    if (loaderId) {
-      document.getElementById(loaderId).style.display = 'inline-block';
-      document.getElementById(tableId).style.display = 'none';
-    }
-    db.ref('leaderboard').orderByChild('bestScore').limitToLast(10).once('value')
-      .then(snapshot => {
-        const entries = [];
-        snapshot.forEach(child => entries.push({ uid: child.key, ...child.val() }));
         entries.sort((a, b) => b.bestScore - a.bestScore);
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = '';
         if (entries.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Пока нет рекордов</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#555;">Нет рекордов</td></tr>';
         } else {
           entries.forEach((entry, i) => {
             const tr = document.createElement('tr');
@@ -439,9 +335,9 @@ const Leaderboard = {
         }
       })
       .catch(err => {
-        console.error('Leaderboard load error:', err);
+        console.error('❌ LB ERROR:', err); // ЛОГ 3
         const tbody = document.querySelector(`#${tableId} tbody`);
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--neon-red);">Ошибка загрузки</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:red;">Ошибка доступа</td></tr>';
       })
       .finally(() => {
         if (loaderId) {
@@ -456,15 +352,10 @@ const Leaderboard = {
 // 7. GAME ENGINE
 // ==========================================
 const Game = {
-  canvas: document.getElementById('gameCanvas'),
-  ctx: null,
-  player: { x: 0, y: 0, size: 12 },
-  enemies: [], particles: [],
-  score: 0, bestScore: 0,
-  spawnTimer: 0, isDying: 0,
-  isPaused: false,
-  lastZone: 1, animationId: null, isRunning: false,
-  currentUser: null, uid: null,
+  canvas: document.getElementById('gameCanvas'), ctx: null,
+  player: { x: 0, y: 0, size: 12 }, enemies: [], particles: [],
+  score: 0, bestScore: 0, spawnTimer: 0, isDying: 0, isPaused: false,
+  lastZone: 1, animationId: null, isRunning: false, currentUser: null, uid: null,
 
   start() {
     this.ctx = this.canvas.getContext('2d');
@@ -475,44 +366,28 @@ const Game = {
       const rect = this.canvas.getBoundingClientRect();
       const cx = e.touches ? e.touches[0].clientX : e.clientX;
       const cy = e.touches ? e.touches[0].clientY : e.clientY;
-      this.player.x = cx - rect.left;
-      this.player.y = cy - rect.top;
+      this.player.x = cx - rect.left; this.player.y = cy - rect.top;
     };
     window.addEventListener('mousemove', moveHandler);
     window.addEventListener('touchmove', moveHandler, { passive: true });
     window.addEventListener('touchstart', moveHandler, { passive: true });
-
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (this.isPaused) this.resume();
-        else this.pause();
-      }
+      if (e.key === 'Escape') { if (this.isPaused) this.resume(); else this.pause(); }
     });
   },
-  resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-  },
+  resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; },
   reset() {
-    this.score = 0;
-    this.enemies = [];
-    this.particles = [];
-    this.spawnTimer = 0;
-    this.isDying = 0;
-    this.isPaused = false;
-    this.lastZone = 1;
+    this.score = 0; this.enemies = []; this.particles = []; this.spawnTimer = 0;
+    this.isDying = 0; this.isPaused = false; this.lastZone = 1;
     World.reset();
-    this.player.x = this.canvas.width / 2;
-    this.player.y = this.canvas.height / 2;
+    this.player.x = this.canvas.width / 2; this.player.y = this.canvas.height / 2;
     document.getElementById('score-display').textContent = 0;
     document.getElementById('best-display').textContent = this.bestScore;
     document.getElementById('zone-display').textContent = 1;
   },
-
   pause() {
     if (!this.isRunning || this.isDying > 0 || this.isPaused) return;
-    this.isPaused = true;
-    this.isRunning = false;
+    this.isPaused = true; this.isRunning = false;
     cancelAnimationFrame(this.animationId);
     Music.pause();
     document.getElementById('pause-score').textContent = this.score;
@@ -521,247 +396,141 @@ const Game = {
   },
   resume() {
     if (!this.isPaused) return;
-    this.isPaused = false;
-    this.isRunning = true;
+    this.isPaused = false; this.isRunning = true;
     Music.resume();
     UI.showScreen(null);
     document.body.classList.add('playing');
     this.loop();
   },
-
   difficultyScore() { return this.score + BALANCE.START_OFFSET; },
   currentSpeed() { return BALANCE.X0 + Math.sqrt(this.difficultyScore()) * BALANCE.SPEED_SCALE; },
-  maxEnemies() {
-    return Math.min(BALANCE.CAP_MAX,
-      BALANCE.CAP_START + Math.floor(this.score / BALANCE.SCORE_PER_CAP) * BALANCE.CAP_STEP);
-  },
-
+  maxEnemies() { return Math.min(BALANCE.CAP_MAX, BALANCE.CAP_START + Math.floor(this.score / BALANCE.SCORE_PER_CAP) * BALANCE.CAP_STEP); },
   makeEnemy() {
     const side = Math.floor(Math.random() * 4);
-    const speed = this.currentSpeed();
-    const M = 40;
+    const speed = this.currentSpeed(); const M = 40;
     let x, y, angle;
     switch (side) {
-      case 0: x = Math.random() * this.canvas.width; y = -M;
-              angle = Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
-      case 1: x = this.canvas.width + M; y = Math.random() * this.canvas.height;
-              angle = Math.PI + (Math.random() - 0.5) * 0.9; break;
-      case 2: x = Math.random() * this.canvas.width; y = this.canvas.height + M;
-              angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
-      default: x = -M; y = Math.random() * this.canvas.height;
-              angle = (Math.random() - 0.5) * 0.9; break;
+      case 0: x = Math.random() * this.canvas.width; y = -M; angle = Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
+      case 1: x = this.canvas.width + M; y = Math.random() * this.canvas.height; angle = Math.PI + (Math.random() - 0.5) * 0.9; break;
+      case 2: x = Math.random() * this.canvas.width; y = this.canvas.height + M; angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.9; break;
+      default: x = -M; y = Math.random() * this.canvas.height; angle = (Math.random() - 0.5) * 0.9; break;
     }
-    const arc = Math.random() < BALANCE.ARC_CHANCE
-      ? { va: (Math.random() < 0.5 ? -1 : 1) * (0.012 + Math.random() * 0.018),
-          life: 60 + Math.random() * 80 }
-      : null;
-    return { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-             size: 8 + Math.random() * 10, arc };
+    const arc = Math.random() < BALANCE.ARC_CHANCE ? { va: (Math.random() < 0.5 ? -1 : 1) * (0.012 + Math.random() * 0.018), life: 60 + Math.random() * 80 } : null;
+    return { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, size: 8 + Math.random() * 10, arc };
   },
-  spawnEnemy() {
-    if (this.enemies.length >= this.maxEnemies()) return;
-    this.enemies.push(this.makeEnemy());
-  },
-
+  spawnEnemy() { if (this.enemies.length >= this.maxEnemies()) return; this.enemies.push(this.makeEnemy()); },
   addParticle(p) { if (this.particles.length < 350) this.particles.push(p); },
   spawnTrail() {
     const count = 1 + Math.min(2, World.zone);
     for (let i = 0; i < count; i++) {
-      this.addParticle({
-        x: this.player.x + (Math.random() - 0.5) * 8,
-        y: this.player.y + (Math.random() - 0.5) * 8,
-        vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6,
-        life: 18 + Math.random() * 12, maxLife: 30,
-        size: 1.5 + Math.random() * 2, color: '0,243,255'
-      });
+      this.addParticle({ x: this.player.x + (Math.random() - 0.5) * 8, y: this.player.y + (Math.random() - 0.5) * 8, vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6, life: 18 + Math.random() * 12, maxLife: 30, size: 1.5 + Math.random() * 2, color: '0,243,255' });
     }
   },
   explode(x, y) {
     const n = 40 + Math.min(5, World.zone) * 12;
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 1 + Math.random() * 5;
-      this.addParticle({
-        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        life: 30 + Math.random() * 25, maxLife: 55,
-        size: 1.5 + Math.random() * 3,
-        color: Math.random() < 0.5 ? '255,0,85' : '0,243,255'
-      });
+      const a = Math.random() * Math.PI * 2; const sp = 1 + Math.random() * 5;
+      this.addParticle({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 30 + Math.random() * 25, maxLife: 55, size: 1.5 + Math.random() * 3, color: Math.random() < 0.5 ? '255,0,85' : '0,243,255' });
     }
   },
   updateParticles() {
     for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.x += p.vx; p.y += p.vy;
-      p.vx *= 0.98; p.vy *= 0.98;
-      p.life--;
+      const p = this.particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.98; p.vy *= 0.98; p.life--;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
   },
   drawParticles() {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.shadowBlur = 0;
+    const ctx = this.ctx; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.shadowBlur = 0;
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.maxLife);
       ctx.fillStyle = `rgba(${p.color},${a.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   },
-
   updateZoneHud() {
     const z = World.zone + 1;
-    if (z !== this.lastZone) {
-      this.lastZone = z;
-      document.getElementById('zone-display').textContent = z;
-    }
+    if (z !== this.lastZone) { this.lastZone = z; document.getElementById('zone-display').textContent = z; }
   },
   update() {
-    World.update(this.score);
-    this.updateZoneHud();
-
+    World.update(this.score); this.updateZoneHud();
     if (this.isDying > 0) {
       for (const e of this.enemies) { e.x += e.vx; e.y += e.vy; }
-      this.updateParticles();
-      this.isDying--;
+      this.updateParticles(); this.isDying--;
       if (this.isDying === 0) this.finishGameOver();
       return;
     }
-
-    this.score++;
-    document.getElementById('score-display').textContent = this.score;
-
+    this.score++; document.getElementById('score-display').textContent = this.score;
     this.spawnTimer++;
     const ds = this.difficultyScore();
-    const interval = Math.max(BALANCE.SPAWN_MIN,
-      BALANCE.SPAWN_START - Math.sqrt(ds) * BALANCE.SPAWN_DECAY);
+    const interval = Math.max(BALANCE.SPAWN_MIN, BALANCE.SPAWN_START - Math.sqrt(ds) * BALANCE.SPAWN_DECAY);
     if (this.spawnTimer >= interval) {
       this.spawnTimer = 0;
       const burst = 1 + Math.min(BALANCE.BURST_MAX_EXTRA, Math.floor(ds / BALANCE.BURST_STEP));
       for (let i = 0; i < burst; i++) this.spawnEnemy();
     }
-
-    this.spawnTrail();
-    this.updateParticles();
-
+    this.spawnTrail(); this.updateParticles();
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (e.arc && e.arc.life > 0) {
         const c = Math.cos(e.arc.va), s = Math.sin(e.arc.va);
-        const nvx = e.vx * c - e.vy * s;
-        e.vy = e.vx * s + e.vy * c;
-        e.vx = nvx;
-        e.arc.life--;
+        const nvx = e.vx * c - e.vy * s; e.vy = e.vx * s + e.vy * c; e.vx = nvx; e.arc.life--;
       }
-      e.x += e.vx;
-      e.y += e.vy;
-      const dx = this.player.x - e.x;
-      const dy = this.player.y - e.y;
-      if (Math.sqrt(dx * dx + dy * dy) < this.player.size + e.size) {
-        this.die();
-        return;
-      }
-      if (e.x < -150 || e.x > this.canvas.width + 150 ||
-          e.y < -150 || e.y > this.canvas.height + 150) {
-        this.enemies.splice(i, 1);
-      }
+      e.x += e.vx; e.y += e.vy;
+      const dx = this.player.x - e.x, dy = this.player.y - e.y;
+      if (Math.sqrt(dx * dx + dy * dy) < this.player.size + e.size) { this.die(); return; }
+      if (e.x < -150 || e.x > this.canvas.width + 150 || e.y < -150 || e.y > this.canvas.height + 150) this.enemies.splice(i, 1);
     }
   },
   draw() {
     World.draw(this.ctx, this.canvas.width, this.canvas.height);
     this.drawParticles();
     if (this.isDying === 0) {
-      this.ctx.shadowBlur = 20;
-      this.ctx.shadowColor = '#00f3ff';
-      this.ctx.fillStyle = '#00f3ff';
-      this.ctx.beginPath();
-      this.ctx.arc(this.player.x, this.player.y, this.player.size, 0, Math.PI * 2);
-      this.ctx.fill();
+      this.ctx.shadowBlur = 20; this.ctx.shadowColor = '#00f3ff'; this.ctx.fillStyle = '#00f3ff';
+      this.ctx.beginPath(); this.ctx.arc(this.player.x, this.player.y, this.player.size, 0, Math.PI * 2); this.ctx.fill();
     }
     const useGlow = this.enemies.length <= BALANCE.GLOW_ENEMY_LIMIT;
-    this.ctx.shadowBlur = useGlow ? 15 : 0;
-    this.ctx.shadowColor = '#ff0055';
-    this.ctx.fillStyle = '#ff0055';
-    for (const e of this.enemies) {
-      this.ctx.beginPath();
-      this.ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
+    this.ctx.shadowBlur = useGlow ? 15 : 0; this.ctx.shadowColor = '#ff0055'; this.ctx.fillStyle = '#ff0055';
+    for (const e of this.enemies) { this.ctx.beginPath(); this.ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2); this.ctx.fill(); }
     this.ctx.shadowBlur = 0;
   },
-  loop() {
-    if (!this.isRunning) return;
-    this.update();
-    this.draw();
-    this.animationId = requestAnimationFrame(() => this.loop());
-  },
-  die() {
-    this.explode(this.player.x, this.player.y);
-    this.isDying = 50;
-  },
+  loop() { if (!this.isRunning) return; this.update(); this.draw(); this.animationId = requestAnimationFrame(() => this.loop()); },
+  die() { this.explode(this.player.x, this.player.y); this.isDying = 50; },
   async finishGameOver() {
-    this.isRunning = false;
-    this.isPaused = false;
+    this.isRunning = false; this.isPaused = false;
     cancelAnimationFrame(this.animationId);
     document.body.classList.remove('playing');
     document.getElementById('final-score').textContent = this.score;
     const isNewRecord = await Leaderboard.saveBestScore(this.currentUser, this.uid, this.score);
     const recordMsg = document.getElementById('new-record-msg');
-    if (isNewRecord) {
-      recordMsg.style.display = 'block';
-      await Leaderboard.refreshBestScore();
-    } else {
-      recordMsg.style.display = 'none';
-    }
+    if (isNewRecord) { recordMsg.style.display = 'block'; await Leaderboard.refreshBestScore(); }
+    else { recordMsg.style.display = 'none'; }
     UI.showScreen('gameover-screen');
   }
 };
 
 // ==========================================
-// 8. UI
+// 8. UI & EVENTS
 // ==========================================
-const UI = {
-  showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    if (id) document.getElementById(id).classList.add('active');
-  }
-};
+const UI = { showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); if (id) document.getElementById(id).classList.add('active'); } };
 
-// ==========================================
-// 9. EVENT LISTENERS
-// ==========================================
 function startGame() {
   if (Game.isRunning) return;
-  Music.start();
-  Game.reset();
-  Game.isRunning = true;
-  document.body.classList.add('playing');
-  Game.loop();
-  UI.showScreen(null);
+  Music.start(); Game.reset(); Game.isRunning = true;
+  document.body.classList.add('playing'); Game.loop(); UI.showScreen(null);
 }
 function returnToMenu() {
-  Game.isRunning = false;
-  Game.isPaused = false;
-  cancelAnimationFrame(Game.animationId);
-  Music.pause();
-  Game.reset();
-  document.body.classList.remove('playing');
-  Leaderboard.loadTop10('menu');
-  UI.showScreen('menu-screen');
+  Game.isRunning = false; Game.isPaused = false;
+  cancelAnimationFrame(Game.animationId); Music.pause(); Game.reset();
+  document.body.classList.remove('playing'); Leaderboard.loadTop10('menu'); UI.showScreen('menu-screen');
 }
 
 document.getElementById('play-btn').addEventListener('click', startGame);
 document.getElementById('restart-btn').addEventListener('click', startGame);
 document.getElementById('menu-btn').addEventListener('click', returnToMenu);
-
 document.getElementById('resume-btn').addEventListener('click', () => Game.resume());
 document.getElementById('pause-restart-btn').addEventListener('click', startGame);
 document.getElementById('pause-menu-btn').addEventListener('click', returnToMenu);
-
 document.getElementById('menu-logout').addEventListener('click', () => auth.signOut());
 
 // Init
